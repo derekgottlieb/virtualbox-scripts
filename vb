@@ -13,17 +13,29 @@ fi
 VMNAME=$1
 ACTION=$2
   
-if [[ ! -z "$3" ]]; then
- GUESTUSER=$3
-else
- GUESTUSER=$USER
-fi
-
 VM_EXISTS=$(vboxmanage list vms | grep -c ^\"$VMNAME\")
 if [ "$VM_EXISTS" -eq 0 ]; then
  printf "\nERROR: $1 is not a valid VM name!\n\n"
  print_usage
  exit
+fi
+
+if [ "$ACTION" == "ssh" ] || [ "$ACTION" == "sshport" ]; then
+ # Determine if we have a port forward set for ssh
+ IS_GUESTSSH=$(vboxmanage showvminfo $VMNAME | grep guest | grep -c ssh)
+ if [ "$IS_GUESTSSH" -gt 0 ]; then
+  PORT=$(vboxmanage showvminfo $VMNAME | grep guest | grep ssh | awk 'BEGIN {FS=","} {print $4}' | awk '{print $NF}')
+ else 
+  echo "$VMNAME: no guest ssh forward rule"
+  exit
+ fi
+ 
+ # Only care about the guest user id for ssh-related actions
+ if [[ ! -z "$3" ]]; then
+  GUESTUSER=$3
+ else
+  GUESTUSER=$USER
+ fi
 fi
 
 case $ACTION in 
@@ -56,23 +68,11 @@ case $ACTION in
   vboxmanage controlvm $VMNAME resume
   ;;
  "ssh")
-  IS_GUESTSSH=$(vboxmanage showvminfo $VMNAME | grep guest | grep -c ssh)
-  if [ "$IS_GUESTSSH" -gt 0 ]; then
-   PORT=$(vboxmanage showvminfo $VMNAME | grep guest | grep ssh | awk 'BEGIN {FS=","} {print $4}' | awk '{print $NF}')
    echo "$VMNAME: ssh -p $PORT $GUESTUSER@localhost"
    ssh -p $PORT $GUESTUSER@localhost
-  else 
-   echo "$VMNAME: no guest ssh forward rule"
-  fi
   ;;
  "sshport")
-  IS_GUESTSSH=$(vboxmanage showvminfo $VMNAME | grep guest | grep -c ssh)
-  if [ "$IS_GUESTSSH" -gt 0 ]; then
-   PORT=$(vboxmanage showvminfo $VMNAME | grep guest | grep ssh | awk 'BEGIN {FS=","} {print $4}' | awk '{print $NF}')
    echo "$VMNAME: ssh -p $PORT $GUESTUSER@localhost"
-  else 
-   echo "$VMNAME: no guest ssh forward rule"
-  fi
   ;;
  "rdpport")
   IS_RDP_PORT=$(vboxmanage showvminfo $VMNAME | grep -c "VRDE property: TCP/Ports")
